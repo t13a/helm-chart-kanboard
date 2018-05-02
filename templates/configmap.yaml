@@ -1,0 +1,33 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ template "kanboard.fullname" . }}
+  labels:
+    app: {{ template "kanboard.name" . }}
+    chart: {{ template "kanboard.chart" . }}
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+data:
+  entrypoint-migration.sh: |
+    #!/bin/bash
+    
+    set -euo pipefail
+
+    chown -R nginx:nginx /var/www/app/data
+    chown -R nginx:nginx /var/www/app/plugins
+
+    /var/www/app/cli db:migrate
+  entrypoint-nomigration.sh: |
+    #!/bin/bash
+
+    set -euo pipefail
+
+    # run command before starting services
+    [ ${#@} -gt 0 ] && "${@}"
+
+    exec /bin/s6-svscan /etc/services.d
+  env.conf: |
+    env[DATABASE_URL] = $DATABASE_URL
+    env[DEBUG] = $DEBUG
+    env[API_AUTHENTICATION_TOKEN] = $API_AUTHENTICATION_TOKEN
+    env[DB_RUN_MIGRATIONS] = 'false'

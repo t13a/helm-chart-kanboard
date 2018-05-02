@@ -1,0 +1,138 @@
+apiVersion: apps/v1beta2
+kind: Deployment
+metadata:
+  name: {{ template "kanboard.fullname" . }}
+  labels:
+    app: {{ template "kanboard.name" . }}
+    chart: {{ template "kanboard.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ template "kanboard.name" . }}
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "kanboard.name" . }}
+        release: {{ .Release.Name }}
+    spec:
+      initContainers:
+        {{- if .Values.database.runMigration }}
+        - name: migration
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+          {{- if .Values.database.url }}
+          - name: DATABASE_URL
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "kanboard.fullname" . }}
+                key: database-url
+          {{- end }}
+          {{- if .Values.debug }}
+          - name: DEBUG
+            value: "{{ .Values.debug }}"
+          {{- end }}
+          {{- if .Values.apiAuthenticationToken }}
+          - name: API_AUTHENTICATION_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "kanboard.fullname" . }}
+                key: api-authentication-token
+          {{- end }}
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+          volumeMounts:
+            - name: migration
+              mountPath: /usr/local/bin/entrypoint.sh
+              subPath: entrypoint-migration.sh
+            - name: migration
+              mountPath: /etc/php7/php-fpm.d/env.conf
+              subPath: env.conf
+            {{- with .Values.extraVolumeMounts }}
+{{ toYaml . | indent 12 }}
+            {{- end}}
+        {{- else }}
+        []
+        {{- end }}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+{{ toYaml .Values.args | indent 12 }}
+          env:
+          {{- if .Values.database.url }}
+          - name: DATABASE_URL
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "kanboard.fullname" . }}
+                key: database-url
+          {{- end }}
+          {{- if .Values.debug }}
+          - name: DEBUG
+            value: "{{ .Values.debug }}"
+          {{- end }}
+          {{- if .Values.apiAuthenticationToken }}
+          - name: API_AUTHENTICATION_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "kanboard.fullname" . }}
+                key: api-authentication-token
+          {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+          # TODO
+          # livenessProbe:
+          #   httpGet:
+          #     path: /
+          #     port: http
+          # readinessProbe:
+          #   httpGet:
+          #     path: /
+          #     port: http
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+          volumeMounts:
+            - name: migration
+              mountPath: /usr/local/bin/entrypoint.sh
+              subPath: entrypoint-nomigration.sh
+            - name: migration
+              mountPath: /etc/php7/php-fpm.d/env.conf
+              subPath: env.conf
+            {{- with .Values.extraVolumeMounts }}
+{{ toYaml . | indent 12 }}
+            {{- end}}
+      volumes:
+        - name: migration
+          configMap:
+            name: {{ template "kanboard.fullname" . }}
+            items:
+            - key: entrypoint-migration.sh
+              path: entrypoint-migration.sh
+              mode: 0755
+            - key: entrypoint-nomigration.sh
+              path: entrypoint-nomigration.sh
+              mode: 0755
+            - key: env.conf
+              path: env.conf
+        {{- with .Values.extraVolumes }}
+{{ toYaml . | indent 8 }}
+        {{- end}}
+    {{- with .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+    {{- with .Values.affinity }}
+      affinity:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+    {{- with .Values.tolerations }}
+      tolerations:
+{{ toYaml . | indent 8 }}
+    {{- end }}
